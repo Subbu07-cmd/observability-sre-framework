@@ -1,0 +1,18 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: promtool check
+        run: |
+          docker run --rm -v "$PWD/prometheus:/etc/prometheus" --entrypoint promtool prom/prometheus:v2.54.1 check config /etc/prometheus/prometheus.yml
+      - name: amtool check
+        run: docker run --rm -v "$PWD/alertmanager:/a" --entrypoint amtool prom/alertmanager:v0.27.0 check-config /a/alertmanager.yml || true
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install pytest ruff && ruff check . && pytest -q
+      - run: shellcheck scripts/*.sh
+      - uses: hashicorp/setup-terraform@v3
+      - run: cd terraform/cloudwatch && terraform fmt -check && terraform init -backend=false && terraform validate

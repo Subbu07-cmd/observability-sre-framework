@@ -1,0 +1,38 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: slack-ops
+  group_by: [alertname, service]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers: [severity="page"]
+      receiver: pagerduty-oncall
+      continue: true
+    - matchers: [severity="ticket"]
+      receiver: slack-ops
+      repeat_interval: 24h
+
+inhibit_rules:
+  # If a host is down, don't also page for everything running on it.
+  - source_matchers: [alertname="TargetDown"]
+    target_matchers: [severity=~"page|ticket"]
+    equal: [instance]
+  # Fast burn supersedes slow burn for the same service.
+  - source_matchers: [alertname="SLOErrorBudgetBurnFast"]
+    target_matchers: [alertname="SLOErrorBudgetBurnSlow"]
+    equal: [service]
+
+receivers:
+  - name: pagerduty-oncall
+    pagerduty_configs:
+      - routing_key_file: /etc/alertmanager/secrets/pagerduty_key
+  - name: slack-ops
+    slack_configs:
+      - api_url_file: /etc/alertmanager/secrets/slack_webhook
+        channel: "#ops-alerts"
+        send_resolved: true
+        title: '{{ .CommonLabels.alertname }} ({{ .Status }})'
+        text: '{{ range .Alerts }}{{ .Annotations.summary }} {{ .Annotations.runbook_url }}{{ "\n" }}{{ end }}'

@@ -1,0 +1,31 @@
+groups:
+  - name: host
+    rules:
+      - alert: TargetDown
+        expr: up == 0
+        for: 3m
+        labels: { severity: page }
+        annotations:
+          summary: "{{ $labels.job }}/{{ $labels.instance }} is down"
+          runbook_url: https://github.com/Subbu07-cmd/observability-sre-framework/blob/main/runbooks/target-down.md
+      - alert: HostHighCpu
+        expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 90
+        for: 15m
+        labels: { severity: ticket }
+        annotations:
+          summary: "CPU > 90% on {{ $labels.instance }} for 15m"
+      - alert: HostMemoryPressure
+        expr: (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) > 0.92
+        for: 10m
+        labels: { severity: page }
+        annotations:
+          summary: "Memory > 92% on {{ $labels.instance }}"
+      - alert: HostDiskWillFillIn4h
+        expr: |
+          predict_linear(node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"}[6h], 4 * 3600) < 0
+          and node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes < 0.2
+        for: 15m
+        labels: { severity: page }
+        annotations:
+          summary: "{{ $labels.mountpoint }} on {{ $labels.instance }} will fill within 4h"
+          runbook_url: https://github.com/Subbu07-cmd/observability-sre-framework/blob/main/runbooks/disk-full.md

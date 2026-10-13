@@ -1,0 +1,5 @@
+- name: Install node_exporter on Linux hosts
+  hosts: all
+  become: true
+  roles:
+    - node_exporter

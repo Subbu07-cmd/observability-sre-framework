@@ -1,0 +1,58 @@
+# Availability SLO = 99.9% of HTTP requests return non-5xx.
+# Multi-window, multi-burn-rate alerts (Google SRE Workbook, ch. 5).
+groups:
+  - name: slo-recording
+    interval: 30s
+    rules:
+      - record: sli:http_requests:error_ratio_rate5m
+        expr: |
+          sum by (service) (rate(http_requests_total{code=~"5.."}[5m]))
+          / sum by (service) (rate(http_requests_total[5m]))
+      - record: sli:http_requests:error_ratio_rate30m
+        expr: |
+          sum by (service) (rate(http_requests_total{code=~"5.."}[30m]))
+          / sum by (service) (rate(http_requests_total[30m]))
+      - record: sli:http_requests:error_ratio_rate1h
+        expr: |
+          sum by (service) (rate(http_requests_total{code=~"5.."}[1h]))
+          / sum by (service) (rate(http_requests_total[1h]))
+      - record: sli:http_requests:error_ratio_rate6h
+        expr: |
+          sum by (service) (rate(http_requests_total{code=~"5.."}[6h]))
+          / sum by (service) (rate(http_requests_total[6h]))
+      - record: sli:http_requests:error_ratio_rate3d
+        expr: |
+          sum by (service) (rate(http_requests_total{code=~"5.."}[3d]))
+          / sum by (service) (rate(http_requests_total[3d]))
+      - record: slo:objective:ratio
+        expr: vector(0.999)
+
+  - name: slo-alerts
+    rules:
+      - alert: SLOErrorBudgetBurnFast
+        expr: |
+          sli:http_requests:error_ratio_rate1h > (14.4 * (1 - 0.999))
+          and sli:http_requests:error_ratio_rate5m > (14.4 * (1 - 0.999))
+        for: 2m
+        labels: { severity: page }
+        annotations:
+          summary: "{{ $labels.service }} is burning error budget 14x too fast"
+          description: "2% of the 30-day error budget consumed in the last hour."
+          runbook_url: https://github.com/Subbu07-cmd/observability-sre-framework/blob/main/runbooks/slo-burn-rate.md
+      - alert: SLOErrorBudgetBurnSlow
+        expr: |
+          sli:http_requests:error_ratio_rate6h > (6 * (1 - 0.999))
+          and sli:http_requests:error_ratio_rate30m > (6 * (1 - 0.999))
+        for: 15m
+        labels: { severity: page }
+        annotations:
+          summary: "{{ $labels.service }} sustained error budget burn (6x)"
+          runbook_url: https://github.com/Subbu07-cmd/observability-sre-framework/blob/main/runbooks/slo-burn-rate.md
+      - alert: SLOErrorBudgetBurnTicket
+        expr: |
+          sli:http_requests:error_ratio_rate3d > (1 * (1 - 0.999))
+          and sli:http_requests:error_ratio_rate6h > (1 * (1 - 0.999))
+        for: 1h
+        labels: { severity: ticket }
+        annotations:
+          summary: "{{ $labels.service }} will exhaust error budget before the window ends"
